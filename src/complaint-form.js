@@ -1,13 +1,57 @@
 import React from 'react';
-import { reduxForm, Field } from 'redux-form';
+import { reduxForm, Field, SubmissionError } from 'redux-form';
 import './complaint-form.css';
-import { required, number, max } from './validators';
+import { required, number, length } from './validators';
 import Input from './input';
 
 export class ComplaintForm extends React.Component {
 	onSubmit(values) {
-		console.log(values);
-	}
+    console.log(values);
+
+    return fetch('https://us-central1-delivery-form-api.cloudfunctions.net/api/report', {
+        method: 'POST',
+        body: JSON.stringify(values),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+        .then(res => {
+            if (!res.ok) {
+                if (
+                    res.headers.has('content-type') &&
+                    res.headers
+                        .get('content-type')
+                        .startsWith('application/json')
+                ) {
+                    // It's a nice JSON error returned by us, so decode it
+                    return res.json().then(err => Promise.reject(err));
+                }
+                // It's a less informative error returned by express
+                return Promise.reject({
+                    code: res.status,
+                    message: res.statusText
+                });
+            }
+            return;
+        })
+        .then(() => console.log('Submitted with values', values))
+        .catch(err => {
+            const {reason, message, location} = err;
+            if (reason === 'ValidationError') {
+                // Convert ValidationErrors into SubmissionErrors for Redux Form
+                return Promise.reject(
+                    new SubmissionError({
+                        [location]: message
+                    })
+                );
+            }
+            return Promise.reject(
+                new SubmissionError({
+                    _error: 'Error submitting message'
+                })
+            );
+        });
+}
 	render() {
 		return (
 			<form onSubmit={this.props.handleSubmit(values => this.onSubmit(values))}>
@@ -17,7 +61,7 @@ export class ComplaintForm extends React.Component {
 					id="tracking-number"
 					type="text"
 					component={Input}
-					validate={[required, number, max]}
+					validate={[required, number, length]}
 				/>
 				<label htmlFor="what-is-your-issue">What is your Issue?</label>
 				<Field
